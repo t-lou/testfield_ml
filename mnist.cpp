@@ -30,6 +30,53 @@ struct ANNImpl : public torch::nn::Module {
 
 TORCH_MODULE(ANN);
 
+struct DNNImpl : public torch::nn::Module {
+ public:
+  DNNImpl(const int32_t num_hidden = 128)
+      : conv1_(torch::nn::Conv2dOptions(1, 32, 3)),
+        conv2_(torch::nn::Conv2dOptions(32, 64, 3)),
+        dropout1_(0.25),
+        dropout2_(0.5),
+        fc1_(9216, num_hidden),
+        fc2_(num_hidden, 10) {
+    register_module("conv1", conv1_);
+    register_module("conv2", conv2_);
+    register_module("dropout1", dropout1_);
+    register_module("dropout2", dropout2_);
+    register_module("fc1", fc1_);
+    register_module("fc2", fc2_);
+  }
+
+  torch::Tensor forward(const torch::Tensor& in) {
+    torch::Tensor x = in;
+
+    x = conv1_->forward(x);
+    x = torch::relu(x);
+    x = conv2_->forward(x);
+    x = torch::relu(x);
+    x = torch::max_pool2d(x, 2);
+    x = dropout1_->forward(x);
+    x = torch::flatten(x, 1);
+    x = fc1_->forward(x);
+    x = torch::relu(x);
+    x = dropout2_->forward(x);
+    x = fc2_->forward(x);
+    x = torch::log_softmax(x, 1);
+
+    return x;
+  }
+
+ private:
+  torch::nn::Conv2d conv1_;
+  torch::nn::Conv2d conv2_;
+  torch::nn::Dropout dropout1_;
+  torch::nn::Dropout dropout2_;
+  torch::nn::Linear fc1_;
+  torch::nn::Linear fc2_;
+};
+
+TORCH_MODULE(DNN);
+
 template <typename Model, typename DataLoader>
 void train(Model& model, const torch::Device device, DataLoader& data_loader,
            torch::optim::Optimizer& optimizer) {
@@ -95,7 +142,7 @@ int main() {
   auto train_loader{torch::data::make_data_loader(train_data, 16)};
   auto test_loader{torch::data::make_data_loader(test_data, 1)};
 
-  ANN model;
+  DNN model;
   model->to(device);
 
   torch::optim::SGD optimizer{model->parameters(),
